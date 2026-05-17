@@ -101,7 +101,6 @@
       will-change: transform;
     }
 
-    /* Tap/swipe zone — handles play/pause taps and manual scroll swipes */
     .tap-zone {
       position: fixed;
       top: 0;
@@ -114,7 +113,7 @@
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.6s ease;
-      touch-action: none; /* let us handle gestures ourselves */
+      touch-action: none;
     }
 
     .tap-zone.active {
@@ -122,7 +121,6 @@
       pointer-events: auto;
     }
 
-    /* Edit button — sits above the tap zone */
     .edit-button {
       position: fixed;
       top: 1rem;
@@ -164,11 +162,12 @@
       background: #0a0a0a;
       display: flex;
       flex-direction: column;
-      justify-content: center;
       align-items: center;
-      padding: 2rem;
+      padding: 2rem 2rem 3rem;
       z-index: 20;
       transition: opacity 0.4s ease;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .edit-view.hidden {
@@ -176,10 +175,19 @@
       pointer-events: none;
     }
 
-    #script-input {
+    /* Center content vertically when there's room; allow scroll otherwise */
+    .edit-content {
       width: 100%;
       max-width: 500px;
-      min-height: 55vh;
+      margin: auto 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #script-input {
+      width: 100%;
+      min-height: 45vh;
       background: transparent;
       border: 1px solid rgba(245, 245, 245, 0.2);
       border-radius: 12px;
@@ -205,8 +213,41 @@
       color: rgba(245, 245, 245, 0.35);
     }
 
+    /* Save / clear row, sitting just below the textarea */
+    .input-actions {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.75rem;
+      padding: 0 0.25rem;
+    }
+
+    .input-action {
+      background: transparent;
+      border: none;
+      color: #f5f5f5;
+      font: inherit;
+      font-size: 0.9375rem;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      padding: 0.5rem 0.25rem;
+      cursor: pointer;
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+    }
+
+    .input-action:active {
+      opacity: 1;
+    }
+
+    .input-action.muted {
+      opacity: 0.25;
+      pointer-events: none;
+    }
+
     .start-prompt {
-      margin-top: 2rem;
+      margin-top: 1.5rem;
       font-size: 1.25rem;
       font-weight: 300;
       letter-spacing: 0.02em;
@@ -226,6 +267,57 @@
     .start-prompt.muted {
       opacity: 0.3;
       pointer-events: none;
+    }
+
+    /* History list */
+    .history {
+      width: 100%;
+      margin-top: 2.5rem;
+    }
+
+    .history.hidden {
+      display: none;
+    }
+
+    .history-header {
+      font-size: 0.75rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.5;
+      margin-bottom: 0.75rem;
+      padding: 0 0.25rem;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .history-item {
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 1px solid rgba(245, 245, 245, 0.12);
+      border-radius: 10px;
+      padding: 0.875rem 1rem;
+      color: #f5f5f5;
+      font: inherit;
+      font-size: 0.9375rem;
+      font-weight: 400;
+      line-height: 1.4;
+      cursor: pointer;
+      opacity: 0.85;
+      transition: opacity 0.2s ease, border-color 0.2s ease;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-item:active {
+      opacity: 1;
+      border-color: rgba(245, 245, 245, 0.35);
     }
 
     /* ===== Error overlay ===== */
@@ -302,8 +394,21 @@
 
   <!-- Edit view -->
   <div class="edit-view" id="edit-view">
-    <textarea id="script-input" placeholder="paste your script"></textarea>
-    <div id="start-prompt" class="start-prompt muted">tap to begin</div>
+    <div class="edit-content">
+      <textarea id="script-input" placeholder="paste your script"></textarea>
+
+      <div class="input-actions">
+        <button class="input-action muted" id="clear-button">clear</button>
+        <button class="input-action muted" id="save-button">save</button>
+      </div>
+
+      <div id="start-prompt" class="start-prompt muted">tap to begin</div>
+
+      <div class="history hidden" id="history">
+        <div class="history-header">Saved</div>
+        <div class="history-list" id="history-list"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Error overlay -->
@@ -317,8 +422,10 @@
 
   <script>
     const STORAGE_KEY = 'fingo:active-script';
-    const DEFAULT_SCROLL_SPEED = 30; // pixels per second
-    const TAP_THRESHOLD = 10; // pixels of movement before a gesture becomes a swipe
+    const HISTORY_STORAGE_KEY = 'fingo:script-history';
+    const HISTORY_MAX = 5;
+    const DEFAULT_SCROLL_SPEED = 30;
+    const TAP_THRESHOLD = 10;
 
     const video = document.getElementById('camera');
     const tint = document.getElementById('tint');
@@ -329,6 +436,10 @@
     const editView = document.getElementById('edit-view');
     const scriptInput = document.getElementById('script-input');
     const startPrompt = document.getElementById('start-prompt');
+    const saveButton = document.getElementById('save-button');
+    const clearButton = document.getElementById('clear-button');
+    const historyContainer = document.getElementById('history');
+    const historyList = document.getElementById('history-list');
     const errorOverlay = document.getElementById('error-overlay');
     const errorTitle = document.getElementById('error-title');
     const errorBody = document.getElementById('error-body');
@@ -340,7 +451,7 @@
 
     let scrollPosition = 0;
     let scrollSpeed = DEFAULT_SCROLL_SPEED;
-    let scrollState = 'idle'; // 'idle' | 'scrolling' | 'paused' | 'ended'
+    let scrollState = 'idle';
     let scrollAnimationFrame = null;
     let lastFrameTime = null;
 
@@ -431,7 +542,7 @@
     let isSwiping = false;
 
     function handlePointerDown(e) {
-      if (activePointerId !== null) return; // ignore multi-touch
+      if (activePointerId !== null) return;
       activePointerId = e.pointerId;
       pointerStartY = e.clientY;
       pointerPreviousY = pointerStartY;
@@ -446,12 +557,10 @@
       const deltaThisFrame = pointerPreviousY - e.clientY;
       totalAbsMovement += Math.abs(deltaThisFrame);
 
-      // Transition into swiping mode once movement exceeds threshold
       if (!isSwiping && totalAbsMovement >= TAP_THRESHOLD) {
         isSwiping = true;
         if (scrollState === 'scrolling') pauseScrolling();
         if (scrollState === 'ended') scrollState = 'paused';
-        // Apply the cumulative movement from touchstart to now
         scrollPosition += pointerStartY - e.clientY;
         clampScrollPosition();
         applyScrollPosition();
@@ -468,7 +577,6 @@
       if (e.pointerId !== activePointerId) return;
 
       if (!isSwiping) {
-        // Movement was under threshold — treat as a tap
         handleTap();
       }
 
@@ -497,9 +605,11 @@
       }
     }
 
-    function updateStartPromptState() {
+    function updateInputActionStates() {
       const hasText = scriptInput.value.trim().length > 0;
       startPrompt.classList.toggle('muted', !hasText);
+      saveButton.classList.toggle('muted', !hasText);
+      clearButton.classList.toggle('muted', !hasText);
     }
 
     function syncScriptToPrompter() {
@@ -507,18 +617,109 @@
       resetScroll();
     }
 
-    // ===== localStorage =====
+    // ===== Active-script localStorage =====
 
-    function saveScript() {
+    function saveActiveScript() {
       localStorage.setItem(STORAGE_KEY, scriptInput.value);
     }
 
-    function loadScript() {
+    function loadActiveScript() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         scriptInput.value = saved;
-        updateStartPromptState();
+        updateInputActionStates();
       }
+    }
+
+    function clearActiveScript() {
+      scriptInput.value = '';
+      localStorage.removeItem(STORAGE_KEY);
+      updateInputActionStates();
+    }
+
+    // ===== History =====
+
+    function loadHistory() {
+      try {
+        const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        console.error('History load error:', err);
+        return [];
+      }
+    }
+
+    function persistHistory(history) {
+      try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+      } catch (err) {
+        console.error('History save error:', err);
+      }
+    }
+
+    function firstLineOf(text) {
+      const firstLine = text.split('\n').find(line => line.trim().length > 0) || '';
+      return firstLine.trim();
+    }
+
+    function addCurrentToHistory() {
+      const content = scriptInput.value.trim();
+      if (!content) return;
+
+      const history = loadHistory();
+
+      // Skip if identical to the most recent entry (avoid duplicates from repeat saves)
+      if (history.length > 0 && history[0].content === content) return;
+
+      history.unshift({
+        id: Date.now().toString(),
+        content,
+        label: firstLineOf(content),
+        savedAt: new Date().toISOString()
+      });
+
+      // Trim FIFO to max
+      while (history.length > HISTORY_MAX) {
+        history.pop();
+      }
+
+      persistHistory(history);
+      renderHistory();
+    }
+
+    function loadFromHistory(id) {
+      const history = loadHistory();
+      const item = history.find(h => h.id === id);
+      if (!item) return;
+      scriptInput.value = item.content;
+      saveActiveScript();
+      updateInputActionStates();
+      // Scroll edit view to top so the user sees their loaded script
+      editView.scrollTop = 0;
+    }
+
+    function renderHistory() {
+      const history = loadHistory();
+
+      if (history.length === 0) {
+        historyContainer.classList.add('hidden');
+        historyList.innerHTML = '';
+        return;
+      }
+
+      historyContainer.classList.remove('hidden');
+      historyList.innerHTML = '';
+
+      history.forEach(item => {
+        const button = document.createElement('button');
+        button.className = 'history-item';
+        button.textContent = item.label || '(empty)';
+        button.dataset.id = item.id;
+        button.addEventListener('click', () => loadFromHistory(item.id));
+        historyList.appendChild(button);
+      });
     }
 
     // ===== Camera =====
@@ -609,12 +810,14 @@
     }
 
     scriptInput.addEventListener('input', () => {
-      saveScript();
-      updateStartPromptState();
+      saveActiveScript();
+      updateInputActionStates();
     });
 
     startPrompt.addEventListener('click', handleStart);
     editButton.addEventListener('click', showEditView);
+    saveButton.addEventListener('click', addCurrentToHistory);
+    clearButton.addEventListener('click', clearActiveScript);
 
     tapZone.addEventListener('pointerdown', handlePointerDown);
     tapZone.addEventListener('pointermove', handlePointerMove);
@@ -628,7 +831,8 @@
 
     // ===== Init =====
 
-    loadScript();
+    loadActiveScript();
+    renderHistory();
   </script>
 </body>
 </html>
