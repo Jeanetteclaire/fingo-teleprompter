@@ -1,0 +1,2 @@
+# fingo-teleprompter
+Teleprompter app
