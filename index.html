@@ -31,7 +31,7 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    /* ===== Prompter layer (camera + tint + script) ===== */
+    /* ===== Prompter layer ===== */
 
     #camera {
       position: fixed;
@@ -67,11 +67,30 @@
       opacity: 1;
     }
 
-    .script {
+    /* Script viewport contains the scrolling text. Padding-top places the
+       first line in the upper reading zone (~35% from top of screen). */
+    .script-viewport {
       position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding-top: 35vh;
+      z-index: 2;
+      pointer-events: none;
+      overflow: hidden;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+
+    .script-viewport.active {
+      opacity: 1;
+    }
+
+    .script-content {
       width: 85%;
       max-width: 600px;
       text-align: center;
@@ -80,18 +99,31 @@
       line-height: 1.5;
       letter-spacing: 0.01em;
       color: #f5f5f5;
+      white-space: pre-wrap;
+      will-change: transform;
+    }
+
+    /* Tap zone — invisible, covers the screen, handles play/pause clicks */
+    .tap-zone {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+      background: transparent;
+      cursor: pointer;
       opacity: 0;
-      transition: opacity 0.6s ease;
-      z-index: 2;
       pointer-events: none;
-      white-space: pre-wrap; /* preserve paragraph breaks from pasted text */
+      transition: opacity 0.6s ease;
     }
 
-    .script.active {
+    .tap-zone.active {
       opacity: 1;
+      pointer-events: auto;
     }
 
-    /* Edit button — visible in prompter view, top-left */
+    /* Edit button — sits above the tap zone */
     .edit-button {
       position: fixed;
       top: 1rem;
@@ -258,19 +290,24 @@
   </style>
 </head>
 <body>
-  <!-- Prompter layer (camera + tint + script + edit button) -->
+  <!-- Prompter layer -->
   <video id="camera" autoplay playsinline muted></video>
   <div class="tint" id="tint"></div>
-  <div class="script" id="script"></div>
+
+  <div class="script-viewport" id="script-viewport">
+    <div class="script-content" id="script-content"></div>
+  </div>
+
+  <div class="tap-zone" id="tap-zone"></div>
   <button class="edit-button" id="edit-button">edit</button>
 
-  <!-- Edit view (first load + when editing from prompter) -->
+  <!-- Edit view -->
   <div class="edit-view" id="edit-view">
     <textarea id="script-input" placeholder="paste your script"></textarea>
     <div id="start-prompt" class="start-prompt muted">tap to begin</div>
   </div>
 
-  <!-- Error overlay (camera failures) -->
+  <!-- Error overlay -->
   <div class="error-overlay hidden" id="error-overlay">
     <div class="error-message">
       <span class="error-title" id="error-title"></span>
@@ -281,10 +318,13 @@
 
   <script>
     const STORAGE_KEY = 'fingo:active-script';
+    const DEFAULT_SCROLL_SPEED = 30; // pixels per second
 
     const video = document.getElementById('camera');
     const tint = document.getElementById('tint');
-    const script = document.getElementById('script');
+    const scriptViewport = document.getElementById('script-viewport');
+    const scriptContent = document.getElementById('script-content');
+    const tapZone = document.getElementById('tap-zone');
     const editButton = document.getElementById('edit-button');
     const editView = document.getElementById('edit-view');
     const scriptInput = document.getElementById('script-input');
@@ -296,17 +336,97 @@
 
     let cameraReady = false;
 
+    // ===== Scroll engine =====
+
+    let scrollPosition = 0;
+    let scrollSpeed = DEFAULT_SCROLL_SPEED;
+    let scrollState = 'idle'; // 'idle' | 'scrolling' | 'paused' | 'ended'
+    let scrollAnimationFrame = null;
+    let lastFrameTime = null;
+
+    function applyScrollPosition() {
+      scriptContent.style.transform = `translateY(-${scrollPosition}px)`;
+    }
+
+    function resetScroll() {
+      scrollPosition = 0;
+      applyScrollPosition();
+      scrollState = 'idle';
+      if (scrollAnimationFrame) {
+        cancelAnimationFrame(scrollAnimationFrame);
+        scrollAnimationFrame = null;
+      }
+      lastFrameTime = null;
+    }
+
+    function scrollFrame(timestamp) {
+      if (scrollState !== 'scrolling') {
+        lastFrameTime = null;
+        scrollAnimationFrame = null;
+        return;
+      }
+
+      if (lastFrameTime !== null) {
+        const delta = (timestamp - lastFrameTime) / 1000;
+        scrollPosition += delta * scrollSpeed;
+        applyScrollPosition();
+
+        // End when content has scrolled past the screen
+        const contentHeight = scriptContent.offsetHeight;
+        const maxScroll = contentHeight + window.innerHeight * 0.5;
+        if (scrollPosition >= maxScroll) {
+          scrollState = 'ended';
+          lastFrameTime = null;
+          scrollAnimationFrame = null;
+          return;
+        }
+      }
+
+      lastFrameTime = timestamp;
+      scrollAnimationFrame = requestAnimationFrame(scrollFrame);
+    }
+
+    function startScrolling() {
+      if (scrollState === 'scrolling') return;
+      scrollState = 'scrolling';
+      lastFrameTime = null;
+      scrollAnimationFrame = requestAnimationFrame(scrollFrame);
+    }
+
+    function pauseScrolling() {
+      scrollState = 'paused';
+    }
+
+    function handleTapZoneClick() {
+      switch (scrollState) {
+        case 'idle':
+        case 'paused':
+          startScrolling();
+          break;
+        case 'scrolling':
+          pauseScrolling();
+          break;
+        case 'ended':
+          resetScroll();
+          break;
+      }
+    }
+
     // ===== Edit/prompter view management =====
 
     function showEditView() {
       editView.classList.remove('hidden');
       editButton.classList.remove('active');
+      tapZone.classList.remove('active');
+      // Stop any active scrolling and reset position
+      resetScroll();
     }
 
     function showPrompterView() {
       editView.classList.add('hidden');
       if (cameraReady) {
         editButton.classList.add('active');
+        tapZone.classList.add('active');
       }
     }
 
@@ -316,7 +436,8 @@
     }
 
     function syncScriptToPrompter() {
-      script.textContent = scriptInput.value.trim();
+      scriptContent.textContent = scriptInput.value.trim();
+      resetScroll();
     }
 
     // ===== localStorage =====
@@ -338,7 +459,7 @@
     function activatePrompter() {
       video.classList.add('active');
       tint.classList.add('active');
-      script.classList.add('active');
+      scriptViewport.classList.add('active');
     }
 
     function showError(title, body, canRetry) {
@@ -427,6 +548,7 @@
 
     startPrompt.addEventListener('click', handleStart);
     editButton.addEventListener('click', showEditView);
+    tapZone.addEventListener('click', handleTapZoneClick);
     retryBtn.addEventListener('click', () => {
       hideError();
       showEditView();
