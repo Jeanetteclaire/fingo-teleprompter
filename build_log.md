@@ -13,7 +13,7 @@ Front camera live feed shows as a blurred fullscreen background after a "tap to 
 Decisions:
 
 - Tap-to-enable rather than auto-init. Safer across iOS Safari quirks; pattern also sets up the eventual start button.
-- Blur level set to 8px as a starting point — to be tuned against real filming conditions.
+- Blur level: 4px (started at 8px, tuned down against real filming conditions).
 - Typography is system font for now — placeholder. Real typography lands in step 2.
 
 State: Single `index.html`, deployed via GitHub Pages. Camera is the only working feature; tapping does nothing beyond initialising it. No PWA manifest yet (step 7).
