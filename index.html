@@ -6,6 +6,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Fingo Teleprompter</title>
+
+  <!-- Manrope from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
   <style>
     * {
       box-sizing: border-box;
@@ -19,7 +25,7 @@
       overflow: hidden;
       background: #0a0a0a;
       color: #f5f5f5;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
       -webkit-user-select: none;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
@@ -33,7 +39,7 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* mirror so it acts like a selfie cam */
+      transform: scaleX(-1);
       filter: blur(4px);
       opacity: 0;
       transition: opacity 0.6s ease;
@@ -43,7 +49,49 @@
       opacity: 1;
     }
 
-    /* Overlay container for all UI states */
+    /* Dark tint overlay — sits between camera and text for legibility */
+    .tint {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .tint.active {
+      opacity: 1;
+    }
+
+    /* Script text — the readable layer */
+    .script {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 85%;
+      max-width: 600px;
+      text-align: center;
+      font-weight: 500;
+      font-size: 44px;
+      line-height: 1.5;
+      letter-spacing: 0.01em;
+      color: #f5f5f5;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .script.active {
+      opacity: 1;
+    }
+
+    /* Overlay container for UI states (start prompt, errors) */
     .overlay {
       position: fixed;
       top: 0;
@@ -63,7 +111,6 @@
       display: none;
     }
 
-    /* Start prompt — the tap-to-begin pill */
     .start-prompt {
       font-size: 1.25rem;
       font-weight: 300;
@@ -81,7 +128,6 @@
       border-color: rgba(245, 245, 245, 0.6);
     }
 
-    /* Error state */
     .error-message {
       font-size: 1rem;
       font-weight: 300;
@@ -122,6 +168,12 @@
 </head>
 <body>
   <video id="camera" autoplay playsinline muted></video>
+  <div class="tint" id="tint"></div>
+
+  <!-- Script text — placeholder for step 2 -->
+  <div class="script" id="script">
+    Three things I wish someone had told me before I turned fifty-five. First, you'll know things you didn't know you knew. Second, the things you used to worry about will mostly stop mattering. Third — and this is the most surprising one — you'll have more energy for the things you actually care about, not less.
+  </div>
 
   <div class="overlay">
     <!-- Start state -->
@@ -137,6 +189,8 @@
 
   <script>
     const video = document.getElementById('camera');
+    const tint = document.getElementById('tint');
+    const script = document.getElementById('script');
     const overlay = document.querySelector('.overlay');
     const startPrompt = document.getElementById('start-prompt');
     const errorState = document.getElementById('error-state');
@@ -161,8 +215,14 @@
       showState(errorState);
     }
 
+    function activatePrompter() {
+      video.classList.add('active');
+      tint.classList.add('active');
+      script.classList.add('active');
+      hideOverlay();
+    }
+
     async function initCamera() {
-      // Check API support
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showError(
           'Camera not supported',
@@ -180,10 +240,8 @@
 
         video.srcObject = stream;
 
-        // Fade in only when the video is actually playing — avoids a jarring flash
         video.addEventListener('playing', () => {
-          video.classList.add('active');
-          hideOverlay();
+          activatePrompter();
         }, { once: true });
 
       } catch (err) {
