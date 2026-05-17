@@ -31,7 +31,8 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    /* Camera background — fills screen, mirrored, blurred */
+    /* ===== Prompter layer (camera + tint + script) ===== */
+
     #camera {
       position: fixed;
       top: 0;
@@ -49,7 +50,6 @@
       opacity: 1;
     }
 
-    /* Dark tint overlay — sits between camera and text for legibility */
     .tint {
       position: fixed;
       top: 0;
@@ -67,7 +67,6 @@
       opacity: 1;
     }
 
-    /* Script text — the readable layer */
     .script {
       position: fixed;
       top: 50%;
@@ -85,33 +84,98 @@
       transition: opacity 0.6s ease;
       z-index: 2;
       pointer-events: none;
+      white-space: pre-wrap; /* preserve paragraph breaks from pasted text */
     }
 
     .script.active {
       opacity: 1;
     }
 
-    /* Overlay container for UI states (start prompt, errors) */
-    .overlay {
+    /* Edit button — visible in prompter view, top-left */
+    .edit-button {
+      position: fixed;
+      top: 1rem;
+      left: 1rem;
+      padding: 0.5rem 1rem;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(245, 245, 245, 0.2);
+      border-radius: 999px;
+      color: #f5f5f5;
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      z-index: 5;
+      opacity: 0;
+      transition: opacity 0.4s ease, border-color 0.2s ease;
+      pointer-events: none;
+    }
+
+    .edit-button.active {
+      opacity: 0.7;
+      pointer-events: auto;
+    }
+
+    .edit-button:active {
+      opacity: 1;
+      border-color: rgba(245, 245, 245, 0.5);
+    }
+
+    /* ===== Edit view ===== */
+
+    .edit-view {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
+      background: #0a0a0a;
       display: flex;
       flex-direction: column;
-      align-items: center;
       justify-content: center;
+      align-items: center;
       padding: 2rem;
-      text-align: center;
-      z-index: 10;
+      z-index: 20;
+      transition: opacity 0.4s ease;
     }
 
-    .state.hidden {
-      display: none;
+    .edit-view.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #script-input {
+      width: 100%;
+      max-width: 500px;
+      min-height: 55vh;
+      background: transparent;
+      border: 1px solid rgba(245, 245, 245, 0.2);
+      border-radius: 12px;
+      padding: 1.5rem;
+      font-family: inherit;
+      font-weight: 400;
+      font-size: 18px;
+      line-height: 1.5;
+      letter-spacing: 0.01em;
+      color: #f5f5f5;
+      resize: none;
+      outline: none;
+      -webkit-user-select: text;
+      user-select: text;
+      transition: border-color 0.2s ease;
+    }
+
+    #script-input:focus {
+      border-color: rgba(245, 245, 245, 0.4);
+    }
+
+    #script-input::placeholder {
+      color: rgba(245, 245, 245, 0.35);
     }
 
     .start-prompt {
+      margin-top: 2rem;
       font-size: 1.25rem;
       font-weight: 300;
       letter-spacing: 0.02em;
@@ -126,6 +190,33 @@
     .start-prompt:active {
       opacity: 1;
       border-color: rgba(245, 245, 245, 0.6);
+    }
+
+    .start-prompt.muted {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    /* ===== Error overlay ===== */
+
+    .error-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 2rem;
+      text-align: center;
+      z-index: 30;
+    }
+
+    .error-overlay.hidden {
+      display: none;
     }
 
     .error-message {
@@ -167,20 +258,21 @@
   </style>
 </head>
 <body>
+  <!-- Prompter layer (camera + tint + script + edit button) -->
   <video id="camera" autoplay playsinline muted></video>
   <div class="tint" id="tint"></div>
+  <div class="script" id="script"></div>
+  <button class="edit-button" id="edit-button">edit</button>
 
-  <!-- Script text — placeholder for step 2 -->
-  <div class="script" id="script">
-    Three things I wish someone had told me before I turned fifty-five. First, you'll know things you didn't know you knew. Second, the things you used to worry about will mostly stop mattering. Third — and this is the most surprising one — you'll have more energy for the things you actually care about, not less.
+  <!-- Edit view (first load + when editing from prompter) -->
+  <div class="edit-view" id="edit-view">
+    <textarea id="script-input" placeholder="paste your script"></textarea>
+    <div id="start-prompt" class="start-prompt muted">tap to begin</div>
   </div>
 
-  <div class="overlay">
-    <!-- Start state -->
-    <div id="start-prompt" class="state start-prompt">tap to begin</div>
-
-    <!-- Error state -->
-    <div id="error-state" class="state error-message hidden">
+  <!-- Error overlay (camera failures) -->
+  <div class="error-overlay hidden" id="error-overlay">
+    <div class="error-message">
       <span class="error-title" id="error-title"></span>
       <span id="error-body"></span>
       <button class="retry-button hidden" id="retry">try again</button>
@@ -188,38 +280,76 @@
   </div>
 
   <script>
+    const STORAGE_KEY = 'fingo:active-script';
+
     const video = document.getElementById('camera');
     const tint = document.getElementById('tint');
     const script = document.getElementById('script');
-    const overlay = document.querySelector('.overlay');
+    const editButton = document.getElementById('edit-button');
+    const editView = document.getElementById('edit-view');
+    const scriptInput = document.getElementById('script-input');
     const startPrompt = document.getElementById('start-prompt');
-    const errorState = document.getElementById('error-state');
+    const errorOverlay = document.getElementById('error-overlay');
     const errorTitle = document.getElementById('error-title');
     const errorBody = document.getElementById('error-body');
     const retryBtn = document.getElementById('retry');
 
-    function hideOverlay() {
-      overlay.style.display = 'none';
+    let cameraReady = false;
+
+    // ===== Edit/prompter view management =====
+
+    function showEditView() {
+      editView.classList.remove('hidden');
+      editButton.classList.remove('active');
     }
 
-    function showState(stateEl) {
-      [startPrompt, errorState].forEach(s => s.classList.add('hidden'));
-      stateEl.classList.remove('hidden');
-      overlay.style.display = 'flex';
+    function showPrompterView() {
+      editView.classList.add('hidden');
+      if (cameraReady) {
+        editButton.classList.add('active');
+      }
+    }
+
+    function updateStartPromptState() {
+      const hasText = scriptInput.value.trim().length > 0;
+      startPrompt.classList.toggle('muted', !hasText);
+    }
+
+    function syncScriptToPrompter() {
+      script.textContent = scriptInput.value.trim();
+    }
+
+    // ===== localStorage =====
+
+    function saveScript() {
+      localStorage.setItem(STORAGE_KEY, scriptInput.value);
+    }
+
+    function loadScript() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        scriptInput.value = saved;
+        updateStartPromptState();
+      }
+    }
+
+    // ===== Camera =====
+
+    function activatePrompter() {
+      video.classList.add('active');
+      tint.classList.add('active');
+      script.classList.add('active');
     }
 
     function showError(title, body, canRetry) {
       errorTitle.textContent = title;
       errorBody.textContent = body;
       retryBtn.classList.toggle('hidden', !canRetry);
-      showState(errorState);
+      errorOverlay.classList.remove('hidden');
     }
 
-    function activatePrompter() {
-      video.classList.add('active');
-      tint.classList.add('active');
-      script.classList.add('active');
-      hideOverlay();
+    function hideError() {
+      errorOverlay.classList.add('hidden');
     }
 
     async function initCamera() {
@@ -229,7 +359,7 @@
           'This browser does not support camera access. Try Safari on iOS or Chrome on Android.',
           false
         );
-        return;
+        return false;
       }
 
       try {
@@ -240,9 +370,12 @@
 
         video.srcObject = stream;
 
-        video.addEventListener('playing', () => {
-          activatePrompter();
-        }, { once: true });
+        return new Promise((resolve) => {
+          video.addEventListener('playing', () => {
+            activatePrompter();
+            resolve(true);
+          }, { once: true });
+        });
 
       } catch (err) {
         console.error('Camera error:', err);
@@ -266,11 +399,42 @@
             true
           );
         }
+        return false;
       }
     }
 
-    startPrompt.addEventListener('click', initCamera);
-    retryBtn.addEventListener('click', () => showState(startPrompt));
+    // ===== Event handlers =====
+
+    async function handleStart() {
+      const scriptText = scriptInput.value.trim();
+      if (!scriptText) return;
+
+      syncScriptToPrompter();
+
+      if (!cameraReady) {
+        const ok = await initCamera();
+        if (!ok) return;
+        cameraReady = true;
+      }
+
+      showPrompterView();
+    }
+
+    scriptInput.addEventListener('input', () => {
+      saveScript();
+      updateStartPromptState();
+    });
+
+    startPrompt.addEventListener('click', handleStart);
+    editButton.addEventListener('click', showEditView);
+    retryBtn.addEventListener('click', () => {
+      hideError();
+      showEditView();
+    });
+
+    // ===== Init =====
+
+    loadScript();
   </script>
 </body>
 </html>
