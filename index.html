@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Fingo Teleprompter</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0a0a;
+      color: #f5f5f5;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Camera background — fills screen, mirrored, blurred */
+    #camera {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* mirror so it acts like a selfie cam */
+      filter: blur(8px);
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+
+    #camera.active {
+      opacity: 1;
+    }
+
+    /* Overlay container for all UI states */
+    .overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      text-align: center;
+      z-index: 10;
+    }
+
+    .state.hidden {
+      display: none;
+    }
+
+    /* Start prompt — the tap-to-begin pill */
+    .start-prompt {
+      font-size: 1.25rem;
+      font-weight: 300;
+      letter-spacing: 0.02em;
+      opacity: 0.85;
+      cursor: pointer;
+      padding: 1.5rem 2rem;
+      border: 1px solid rgba(245, 245, 245, 0.3);
+      border-radius: 999px;
+      transition: opacity 0.2s ease, border-color 0.2s ease;
+    }
+
+    .start-prompt:active {
+      opacity: 1;
+      border-color: rgba(245, 245, 245, 0.6);
+    }
+
+    /* Error state */
+    .error-message {
+      font-size: 1rem;
+      font-weight: 300;
+      max-width: 20rem;
+      line-height: 1.6;
+      opacity: 0.85;
+    }
+
+    .error-title {
+      display: block;
+      font-weight: 500;
+      margin-bottom: 0.75rem;
+      font-size: 1.125rem;
+    }
+
+    .retry-button {
+      display: block;
+      margin: 1.5rem auto 0;
+      padding: 0.75rem 1.5rem;
+      background: transparent;
+      border: 1px solid rgba(245, 245, 245, 0.3);
+      border-radius: 999px;
+      color: inherit;
+      font: inherit;
+      font-size: 0.9375rem;
+      cursor: pointer;
+      transition: border-color 0.2s ease;
+    }
+
+    .retry-button:active {
+      border-color: rgba(245, 245, 245, 0.6);
+    }
+
+    .retry-button.hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <video id="camera" autoplay playsinline muted></video>
+
+  <div class="overlay">
+    <!-- Start state -->
+    <div id="start-prompt" class="state start-prompt">tap to begin</div>
+
+    <!-- Error state -->
+    <div id="error-state" class="state error-message hidden">
+      <span class="error-title" id="error-title"></span>
+      <span id="error-body"></span>
+      <button class="retry-button hidden" id="retry">try again</button>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('camera');
+    const overlay = document.querySelector('.overlay');
+    const startPrompt = document.getElementById('start-prompt');
+    const errorState = document.getElementById('error-state');
+    const errorTitle = document.getElementById('error-title');
+    const errorBody = document.getElementById('error-body');
+    const retryBtn = document.getElementById('retry');
+
+    function hideOverlay() {
+      overlay.style.display = 'none';
+    }
+
+    function showState(stateEl) {
+      [startPrompt, errorState].forEach(s => s.classList.add('hidden'));
+      stateEl.classList.remove('hidden');
+      overlay.style.display = 'flex';
+    }
+
+    function showError(title, body, canRetry) {
+      errorTitle.textContent = title;
+      errorBody.textContent = body;
+      retryBtn.classList.toggle('hidden', !canRetry);
+      showState(errorState);
+    }
+
+    async function initCamera() {
+      // Check API support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showError(
+          'Camera not supported',
+          'This browser does not support camera access. Try Safari on iOS or Chrome on Android.',
+          false
+        );
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false
+        });
+
+        video.srcObject = stream;
+
+        // Fade in only when the video is actually playing — avoids a jarring flash
+        video.addEventListener('playing', () => {
+          video.classList.add('active');
+          hideOverlay();
+        }, { once: true });
+
+      } catch (err) {
+        console.error('Camera error:', err);
+
+        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+          showError(
+            'Camera access denied',
+            'The teleprompter uses the camera as a background so you can see your framing while reading. Allow camera access in your browser settings and try again.',
+            true
+          );
+        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+          showError(
+            'No camera found',
+            'No camera was detected on this device. The teleprompter is designed for phones with a front-facing camera.',
+            false
+          );
+        } else {
+          showError(
+            'Camera unavailable',
+            `Something went wrong: ${err.message || err.name || 'unknown error'}. Try refreshing the page.`,
+            true
+          );
+        }
+      }
+    }
+
+    startPrompt.addEventListener('click', initCamera);
+    retryBtn.addEventListener('click', () => showState(startPrompt));
+  </script>
+</body>
+</html>
