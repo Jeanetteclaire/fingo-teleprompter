@@ -163,8 +163,6 @@
       z-index: 5;
       opacity: 0;
       pointer-events: none;
-      /* ANIMATION 3: button press feedback.
-         Transition both opacity AND transform so the press scales smoothly. */
       transition: opacity 0.4s ease, border-color 0.2s ease, transform 0.15s ease;
     }
 
@@ -176,7 +174,7 @@
     .edit-button:active {
       opacity: 1;
       border-color: rgba(245, 245, 245, 0.5);
-      transform: scale(0.96); /* press feedback */
+      transform: scale(0.96);
     }
 
     /* ===== Speed slider ===== */
@@ -227,9 +225,6 @@
       border-radius: 999px;
     }
 
-    /* ANIMATION 5: springy slider thumb.
-       The cubic-bezier curve creates a slight overshoot — the thumb
-       scales past 1.15 and bounces back. Feel: physical, not robotic. */
     .speed-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -274,9 +269,6 @@
       align-items: center;
       padding: max(2rem, env(safe-area-inset-top)) 2rem max(3rem, env(safe-area-inset-bottom));
       z-index: 20;
-      /* ANIMATION 2: view transition with scale + opacity.
-         Default state: visible and full size. The .hidden class shrinks
-         slightly while fading out. Reversed when class is removed. */
       transition: opacity 0.4s ease, transform 0.4s ease;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
@@ -295,6 +287,19 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+    }
+
+    /* Edit view title — quiet editorial wordmark above the textarea.
+       Manrope Light (300) at 32px, soft white, slight letter-spacing
+       for editorial air. Sits as the visual anchor of the page. */
+    .edit-title {
+      font-size: 32px;
+      font-weight: 300;
+      letter-spacing: 0.02em;
+      color: #f5f5f5;
+      margin-bottom: 2rem;
+      align-self: flex-start;
+      padding-left: 0.25rem;
     }
 
     #script-input {
@@ -345,7 +350,6 @@
       padding: 0.5rem 0.25rem;
       cursor: pointer;
       opacity: 0.7;
-      /* ANIMATION 3: press feedback on save/clear */
       transition: opacity 0.2s ease, transform 0.15s ease;
     }
 
@@ -369,13 +373,9 @@
       padding: 1.5rem 2rem;
       border: 1px solid rgba(245, 245, 245, 0.3);
       border-radius: 999px;
-      /* ANIMATION 3: press feedback on the main CTA */
       transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
     }
 
-    /* ANIMATION 1: pulse only when ready (not muted).
-       :not(.muted) means "this element when it doesn't have the muted class".
-       The animation starts as soon as the selector matches, stops when it doesn't. */
     .start-prompt:not(.muted) {
       animation: startPromptPulse 2.5s ease-in-out infinite;
     }
@@ -430,19 +430,13 @@
       line-height: 1.4;
       cursor: pointer;
       opacity: 0.85;
-      /* ANIMATION 4: enter from below.
-         Each item runs the historyItemEnter keyframes once on creation.
-         forwards = stay at the end state when the animation finishes. */
       animation: historyItemEnter 0.4s ease-out forwards;
-      /* ANIMATION 3: press feedback */
       transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    /* Stagger: each item enters slightly after the previous one.
-       Creates a cascade rather than everything appearing at once. */
     .history-item:nth-child(1) { animation-delay: 0ms; }
     .history-item:nth-child(2) { animation-delay: 50ms; }
     .history-item:nth-child(3) { animation-delay: 100ms; }
@@ -545,6 +539,8 @@
   <!-- Edit view -->
   <div class="edit-view" id="edit-view">
     <div class="edit-content">
+      <h1 class="edit-title">Cue Card</h1>
+
       <textarea id="script-input" placeholder="paste your script"></textarea>
 
       <div class="input-actions">
