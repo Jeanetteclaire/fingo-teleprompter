@@ -151,6 +151,86 @@
       border-color: rgba(245, 245, 245, 0.5);
     }
 
+    /* ===== Speed slider ===== */
+
+    .speed-control {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 75%;
+      max-width: 400px;
+      z-index: 6;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+
+    .speed-control.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .speed-control.dim {
+      opacity: 0.35;
+    }
+
+    .speed-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      height: 36px; /* tall touch target */
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Track */
+    .speed-slider::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 2px;
+      background: rgba(245, 245, 245, 0.25);
+      border-radius: 999px;
+    }
+
+    .speed-slider::-moz-range-track {
+      width: 100%;
+      height: 2px;
+      background: rgba(245, 245, 245, 0.25);
+      border-radius: 999px;
+    }
+
+    /* Thumb */
+    .speed-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #f5f5f5;
+      margin-top: -10px; /* center on the 2px track */
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+
+    .speed-slider::-webkit-slider-thumb:active {
+      transform: scale(1.15);
+    }
+
+    .speed-slider::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #f5f5f5;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+
+    .speed-slider::-moz-range-thumb:active {
+      transform: scale(1.15);
+    }
+
     /* ===== Edit view ===== */
 
     .edit-view {
@@ -175,7 +255,6 @@
       pointer-events: none;
     }
 
-    /* Center content vertically when there's room; allow scroll otherwise */
     .edit-content {
       width: 100%;
       max-width: 500px;
@@ -213,7 +292,6 @@
       color: rgba(245, 245, 245, 0.35);
     }
 
-    /* Save / clear row, sitting just below the textarea */
     .input-actions {
       width: 100%;
       display: flex;
@@ -269,7 +347,6 @@
       pointer-events: none;
     }
 
-    /* History list */
     .history {
       width: 100%;
       margin-top: 2.5rem;
@@ -392,6 +469,20 @@
   <div class="tap-zone" id="tap-zone"></div>
   <button class="edit-button" id="edit-button">edit</button>
 
+  <!-- Speed slider -->
+  <div class="speed-control" id="speed-control">
+    <input
+      type="range"
+      class="speed-slider"
+      id="speed-slider"
+      min="15"
+      max="90"
+      step="5"
+      value="45"
+      aria-label="scroll speed"
+    >
+  </div>
+
   <!-- Edit view -->
   <div class="edit-view" id="edit-view">
     <div class="edit-content">
@@ -423,8 +514,11 @@
   <script>
     const STORAGE_KEY = 'fingo:active-script';
     const HISTORY_STORAGE_KEY = 'fingo:script-history';
+    const SPEED_STORAGE_KEY = 'fingo:scroll-speed';
     const HISTORY_MAX = 5;
-    const DEFAULT_SCROLL_SPEED = 30;
+    const DEFAULT_SCROLL_SPEED = 45;
+    const MIN_SPEED = 15;
+    const MAX_SPEED = 90;
     const TAP_THRESHOLD = 10;
 
     const video = document.getElementById('camera');
@@ -433,6 +527,8 @@
     const scriptContent = document.getElementById('script-content');
     const tapZone = document.getElementById('tap-zone');
     const editButton = document.getElementById('edit-button');
+    const speedControl = document.getElementById('speed-control');
+    const speedSlider = document.getElementById('speed-slider');
     const editView = document.getElementById('edit-view');
     const scriptInput = document.getElementById('script-input');
     const startPrompt = document.getElementById('start-prompt');
@@ -477,6 +573,7 @@
         scrollAnimationFrame = null;
       }
       lastFrameTime = null;
+      updateSpeedControlDim();
     }
 
     function scrollFrame(timestamp) {
@@ -495,6 +592,7 @@
           scrollState = 'ended';
           lastFrameTime = null;
           scrollAnimationFrame = null;
+          updateSpeedControlDim();
           return;
         }
       }
@@ -512,10 +610,12 @@
       scrollState = 'scrolling';
       lastFrameTime = null;
       scrollAnimationFrame = requestAnimationFrame(scrollFrame);
+      updateSpeedControlDim();
     }
 
     function pauseScrolling() {
       scrollState = 'paused';
+      updateSpeedControlDim();
     }
 
     function handleTap() {
@@ -588,12 +688,49 @@
       isSwiping = false;
     }
 
+    // ===== Speed control =====
+
+    function updateSpeedControlDim() {
+      speedControl.classList.toggle('dim', scrollState === 'scrolling');
+    }
+
+    function handleSpeedChange() {
+      const value = Number(speedSlider.value);
+      if (Number.isFinite(value)) {
+        scrollSpeed = value;
+        persistSpeed(value);
+      }
+    }
+
+    function persistSpeed(value) {
+      try {
+        localStorage.setItem(SPEED_STORAGE_KEY, String(value));
+      } catch (err) {
+        console.error('Speed save error:', err);
+      }
+    }
+
+    function loadSpeed() {
+      try {
+        const raw = localStorage.getItem(SPEED_STORAGE_KEY);
+        if (raw === null) return;
+        const value = Number(raw);
+        if (Number.isFinite(value) && value >= MIN_SPEED && value <= MAX_SPEED) {
+          scrollSpeed = value;
+          speedSlider.value = String(value);
+        }
+      } catch (err) {
+        console.error('Speed load error:', err);
+      }
+    }
+
     // ===== Edit/prompter view management =====
 
     function showEditView() {
       editView.classList.remove('hidden');
       editButton.classList.remove('active');
       tapZone.classList.remove('active');
+      speedControl.classList.remove('active');
       resetScroll();
     }
 
@@ -602,6 +739,7 @@
       if (cameraReady) {
         editButton.classList.add('active');
         tapZone.classList.add('active');
+        speedControl.classList.add('active');
       }
     }
 
@@ -670,7 +808,6 @@
 
       const history = loadHistory();
 
-      // Skip if identical to the most recent entry (avoid duplicates from repeat saves)
       if (history.length > 0 && history[0].content === content) return;
 
       history.unshift({
@@ -680,7 +817,6 @@
         savedAt: new Date().toISOString()
       });
 
-      // Trim FIFO to max
       while (history.length > HISTORY_MAX) {
         history.pop();
       }
@@ -696,7 +832,6 @@
       scriptInput.value = item.content;
       saveActiveScript();
       updateInputActionStates();
-      // Scroll edit view to top so the user sees their loaded script
       editView.scrollTop = 0;
     }
 
@@ -824,6 +959,8 @@
     tapZone.addEventListener('pointerup', handlePointerUp);
     tapZone.addEventListener('pointercancel', handlePointerUp);
 
+    speedSlider.addEventListener('input', handleSpeedChange);
+
     retryBtn.addEventListener('click', () => {
       hideError();
       showEditView();
@@ -831,6 +968,7 @@
 
     // ===== Init =====
 
+    loadSpeed();
     loadActiveScript();
     renderHistory();
   </script>
