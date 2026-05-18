@@ -6,6 +6,50 @@ Newest at the top.
 
 ---
 
+## 2026-05-18 — Step 3.5: Save, clear, and script history
+
+Save and clear buttons below the textarea. Save adds the current script to a 5-slot FIFO history stored in localStorage; oldest falls off when full. History items display the first non-empty line of the script as their label; tapping one loads it back into the textarea. Clear empties the textarea and active script without confirmation.
+
+Decisions:
+
+- Save dedupes against the most recent entry. Repeated saves of the same script don't create duplicate history entries.
+- History and active script use separate localStorage keys (`fingo:script-history` and `fingo:active-script`). Keeps the two concerns independent.
+- Save/clear/start-prompt all share the same "muted when textarea empty" pattern.
+- Edit view is now scrollable on smaller phones if textarea + actions + history don't all fit at once.
+
+State: Functionally complete for typing, pasting, and managing scripts. Scroll mechanics in step 4 already in. Speed control, countdown, wake lock still pending.
+
+---
+
+## 2026-05-18 — Step 4: Auto-scroll with manual scroll-back
+
+Auto-scroll engine via `requestAnimationFrame`. Tap anywhere on the screen to start; tap again to pause; tap to resume. Swipe up/down to manually scroll for finding a particular line. Tap/swipe disambiguation uses a 10px movement threshold. Swiping while auto-scrolling pauses it. Scrolling past the end enters an "ended" state; one more tap resets to the top.
+
+Decisions:
+
+- Tap zone covers the whole screen except the edit button. Pattern works well for teleprompters because your hand is already on the phone.
+- First line of text positioned at ~35% from top of screen. Above centre — eyes naturally read upper portion when phone sits near the camera lens.
+- Default scroll speed: 30 px/sec. Felt slightly slow on first use; range gets a slider in step 5.
+- Pointer events (rather than touch events) for gesture handling. Works across iOS/Android/desktop with the same code.
+
+State: Scrolling is complete. Speed is fixed at 30 px/s.
+
+---
+
+## 2026-05-17 — Step 3: Paste-in input
+
+Textarea on the dark edit view replaces the hardcoded placeholder paragraph. Whatever you paste becomes the prompter text. Active script auto-saves to localStorage continuously; survives a refresh. "Tap to begin" pill is muted when the textarea is empty. Edit button in the prompter view returns to edit view for swapping scripts.
+
+Decisions:
+
+- Camera initialises once and stays running; returning to edit doesn't tear it down.
+- localStorage key: `fingo:active-script`. Reserved for the active script only — history (step 3.5) gets its own key.
+- Textarea inherits Manrope but smaller (18px) — for typing comfort, not prompter reading.
+
+State: `index.html` has the full visual identity plus working script entry. No scrolling yet.
+
+---
+
 ## 2026-05-17 — Step 2: Typography and text overlay
 
 Manrope loaded from Google Fonts. Hardcoded placeholder paragraph renders centered over the blurred camera, with a dark tint layer between camera and text for legibility.
@@ -17,7 +61,7 @@ Decisions:
 - Width 85% of screen, max-width 600px, vertically centered.
 - Tint opacity: 0.5 (started at 0.35, tuned up — at lower values the eye competed between the text and the blurred camera for focus).
 
-State: `index.html` now has the full visual identity — blurred camera, dark tint, Manrope script overlay. Tap-to-begin still the only interaction; no paste-in, no scrolling. Both come in steps 3 and 4.
+State: `index.html` now has the full visual identity — blurred camera, dark tint, Manrope script overlay. Tap-to-begin still the only interaction.
 
 ---
 
