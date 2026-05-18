@@ -6,6 +6,21 @@ Newest at the top.
 
 ---
 
+## 2026-05-18 — Step 5: Speed slider
+
+Slider at the bottom of the prompter view controls scroll speed (15-90 px/s, step 5, default 45). Dims to 35% opacity while actively scrolling so it stays available without competing visually. Chosen speed persists to localStorage.
+
+Decisions:
+
+- Range 15-90 px/s. Natural reading speed lands near the middle — wider than typical use but gives headroom either side without forcing it.
+- Native HTML `<input type="range">` with custom-styled track and thumb via Webkit and Firefox shadow-DOM pseudo-elements.
+- Slider sits above the tap zone in z-index so adjusting it doesn't trigger pan-scroll.
+- No numeric readout — thumb position is the indicator.
+
+State: Scroll, speed control, manual scroll-back, script entry, save/clear/history all working. Remaining: wake lock, PWA wrapper, countdown + illustrations, polish.
+
+---
+
 ## 2026-05-18 — Step 3.5: Save, clear, and script history
 
 Save and clear buttons below the textarea. Save adds the current script to a 5-slot FIFO history stored in localStorage; oldest falls off when full. History items display the first non-empty line of the script as their label; tapping one loads it back into the textarea. Clear empties the textarea and active script without confirmation.
