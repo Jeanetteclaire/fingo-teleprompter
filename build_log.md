@@ -6,6 +6,39 @@ Newest at the top.
 
 ---
 
+## 2026-05-18 — Step 7: PWA wrapper
+
+`manifest.json` declaring the app (name, icons, standalone display mode, portrait orientation, dark background colour). `index.html` updated with iOS-specific meta tags: `apple-mobile-web-app-capable`, status bar style, app title, and `apple-touch-icon` links for the home-screen icon. Safe-area-inset padding added to the edit button, speed slider, and edit view so UI elements respect the notch and home indicator when running in standalone mode.
+
+Custom icon: the mouth reference image at 192px and 512px, sitting in the repo as `icon-192.png` and `icon-512.png`.
+
+Decisions:
+
+- `display: "standalone"` — launches without Safari chrome (no URL bar, no tabs). Feels like an app.
+- Short name "Fingo" — fits under the home-screen icon without truncation.
+- Theme + background colour both `#0a0a0a` to match the app's dark identity through cold launch.
+- No service worker. Offline support would require one but the teleprompter needs the camera (which itself needs HTTPS and a live page), so true offline isn't a real use case here. Skipped deliberately.
+- No custom splash screen. iOS shows a brief dark frame on cold launch — adequate, not designed.
+- 512px icon registered with `purpose: maskable` as well as `any`, so Android can crop it into its adaptive-icon shape if anyone installs on Android.
+
+State: functionally and visually a real app on the home screen. Installable on iOS via Safari → Share → Add to Home Screen. Launches full-screen from icon. The mouth reference image now serves as the app icon.
+
+---
+
+## 2026-05-18 — Step 6: Wake lock
+
+Wake Lock API requested when entering prompter view, released when returning to edit view. Re-acquires automatically when the tab becomes visible again after being hidden (browser releases on hide). Quiet fallback for browsers that don't support the API — nothing breaks, the screen just behaves normally.
+
+Decisions:
+
+- No visible indicator. Wake lock is invisible by design — works in the background.
+- `wakeLockDesired` flag tracks intent separately from sentinel presence, so visibility-change handler knows whether to re-request after backgrounding.
+- Wrapped in try/catch with console.error logging. Failure shouldn't block the prompter from running.
+
+State: screen stays awake during prompter use, sleeps normally otherwise. Functional, no UI surface.
+
+---
+
 ## 2026-05-18 — Step 5: Speed slider
 
 Slider at the bottom of the prompter view controls scroll speed (15-90 px/s, step 5, default 45). Dims to 35% opacity while actively scrolling so it stays available without competing visually. Chosen speed persists to localStorage.
@@ -17,7 +50,7 @@ Decisions:
 - Slider sits above the tap zone in z-index so adjusting it doesn't trigger pan-scroll.
 - No numeric readout — thumb position is the indicator.
 
-State: Scroll, speed control, manual scroll-back, script entry, save/clear/history all working. Remaining: wake lock, PWA wrapper, countdown + illustrations, polish.
+State: scroll, speed control, manual scroll-back, script entry, save/clear/history all working. Remaining: wake lock, PWA wrapper, countdown + illustrations, polish.
 
 ---
 
