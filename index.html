@@ -3,9 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <title>Fingo Teleprompter</title>
+
+  <!-- PWA: manifest + iOS standalone behaviour -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0a0a0a">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Fingo Teleprompter</title>
+  <meta name="apple-mobile-web-app-title" content="Fingo">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="./icon-512.png">
 
   <!-- Manrope from Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -123,7 +131,7 @@
 
     .edit-button {
       position: fixed;
-      top: 1rem;
+      top: max(1rem, env(safe-area-inset-top));
       left: 1rem;
       padding: 0.5rem 1rem;
       background: rgba(0, 0, 0, 0.4);
@@ -155,7 +163,7 @@
 
     .speed-control {
       position: fixed;
-      bottom: 2rem;
+      bottom: max(2rem, env(safe-area-inset-bottom));
       left: 50%;
       transform: translateX(-50%);
       width: 75%;
@@ -241,7 +249,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 2rem 2rem 3rem;
+      padding: max(2rem, env(safe-area-inset-top)) 2rem max(3rem, env(safe-area-inset-bottom));
       z-index: 20;
       transition: opacity 0.4s ease;
       overflow-y: auto;
@@ -550,7 +558,6 @@
       wakeLockDesired = true;
 
       if (!('wakeLock' in navigator)) {
-        // Older browsers — quiet fallback, nothing to do
         return;
       }
 
@@ -577,7 +584,6 @@
       }
     }
 
-    // Re-acquire wake lock when returning to the tab (browser releases on hide)
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && wakeLockDesired && !wakeLockSentinel) {
         requestWakeLock();
