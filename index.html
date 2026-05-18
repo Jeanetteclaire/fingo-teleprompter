@@ -6,7 +6,7 @@
 
   <title>Fingo Teleprompter</title>
 
-  <!-- PWA: manifest + iOS standalone behaviour -->
+  <!-- PWA -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0a0a0a">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,6 +37,23 @@
       -webkit-user-select: none;
       user-select: none;
       -webkit-tap-highlight-color: transparent;
+    }
+
+    /* ===== ANIMATION 1: keyframes for "tap to begin" pulse =====
+       A keyframe defines a sequence over time. 0% to 100% are the start
+       and end states; values in between are interpolated by the browser. */
+    @keyframes startPromptPulse {
+      0%   { transform: scale(1);    opacity: 0.85; }
+      50%  { transform: scale(1.03); opacity: 1;    }
+      100% { transform: scale(1);    opacity: 0.85; }
+    }
+
+    /* ===== ANIMATION 4: keyframes for history items entering =====
+       One-shot animation — runs once when the element is added. The
+       browser plays from `from` to `to` over the duration. */
+    @keyframes historyItemEnter {
+      from { opacity: 0;    transform: translateY(8px); }
+      to   { opacity: 0.85; transform: translateY(0);   }
     }
 
     /* ===== Prompter layer ===== */
@@ -145,8 +162,10 @@
       cursor: pointer;
       z-index: 5;
       opacity: 0;
-      transition: opacity 0.4s ease, border-color 0.2s ease;
       pointer-events: none;
+      /* ANIMATION 3: button press feedback.
+         Transition both opacity AND transform so the press scales smoothly. */
+      transition: opacity 0.4s ease, border-color 0.2s ease, transform 0.15s ease;
     }
 
     .edit-button.active {
@@ -157,6 +176,7 @@
     .edit-button:active {
       opacity: 1;
       border-color: rgba(245, 245, 245, 0.5);
+      transform: scale(0.96); /* press feedback */
     }
 
     /* ===== Speed slider ===== */
@@ -207,6 +227,9 @@
       border-radius: 999px;
     }
 
+    /* ANIMATION 5: springy slider thumb.
+       The cubic-bezier curve creates a slight overshoot — the thumb
+       scales past 1.15 and bounces back. Feel: physical, not robotic. */
     .speed-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -216,11 +239,11 @@
       background: #f5f5f5;
       margin-top: -10px;
       cursor: pointer;
-      transition: transform 0.15s ease;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     .speed-slider::-webkit-slider-thumb:active {
-      transform: scale(1.15);
+      transform: scale(1.25);
     }
 
     .speed-slider::-moz-range-thumb {
@@ -230,11 +253,11 @@
       background: #f5f5f5;
       border: none;
       cursor: pointer;
-      transition: transform 0.15s ease;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     .speed-slider::-moz-range-thumb:active {
-      transform: scale(1.15);
+      transform: scale(1.25);
     }
 
     /* ===== Edit view ===== */
@@ -251,13 +274,17 @@
       align-items: center;
       padding: max(2rem, env(safe-area-inset-top)) 2rem max(3rem, env(safe-area-inset-bottom));
       z-index: 20;
-      transition: opacity 0.4s ease;
+      /* ANIMATION 2: view transition with scale + opacity.
+         Default state: visible and full size. The .hidden class shrinks
+         slightly while fading out. Reversed when class is removed. */
+      transition: opacity 0.4s ease, transform 0.4s ease;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
 
     .edit-view.hidden {
       opacity: 0;
+      transform: scale(0.98);
       pointer-events: none;
     }
 
@@ -318,11 +345,13 @@
       padding: 0.5rem 0.25rem;
       cursor: pointer;
       opacity: 0.7;
-      transition: opacity 0.2s ease;
+      /* ANIMATION 3: press feedback on save/clear */
+      transition: opacity 0.2s ease, transform 0.15s ease;
     }
 
     .input-action:active {
       opacity: 1;
+      transform: scale(0.94);
     }
 
     .input-action.muted {
@@ -340,12 +369,21 @@
       padding: 1.5rem 2rem;
       border: 1px solid rgba(245, 245, 245, 0.3);
       border-radius: 999px;
-      transition: opacity 0.2s ease, border-color 0.2s ease;
+      /* ANIMATION 3: press feedback on the main CTA */
+      transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+    }
+
+    /* ANIMATION 1: pulse only when ready (not muted).
+       :not(.muted) means "this element when it doesn't have the muted class".
+       The animation starts as soon as the selector matches, stops when it doesn't. */
+    .start-prompt:not(.muted) {
+      animation: startPromptPulse 2.5s ease-in-out infinite;
     }
 
     .start-prompt:active {
       opacity: 1;
       border-color: rgba(245, 245, 245, 0.6);
+      transform: scale(0.96);
     }
 
     .start-prompt.muted {
@@ -392,15 +430,29 @@
       line-height: 1.4;
       cursor: pointer;
       opacity: 0.85;
-      transition: opacity 0.2s ease, border-color 0.2s ease;
+      /* ANIMATION 4: enter from below.
+         Each item runs the historyItemEnter keyframes once on creation.
+         forwards = stay at the end state when the animation finishes. */
+      animation: historyItemEnter 0.4s ease-out forwards;
+      /* ANIMATION 3: press feedback */
+      transition: opacity 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
+    /* Stagger: each item enters slightly after the previous one.
+       Creates a cascade rather than everything appearing at once. */
+    .history-item:nth-child(1) { animation-delay: 0ms; }
+    .history-item:nth-child(2) { animation-delay: 50ms; }
+    .history-item:nth-child(3) { animation-delay: 100ms; }
+    .history-item:nth-child(4) { animation-delay: 150ms; }
+    .history-item:nth-child(5) { animation-delay: 200ms; }
+
     .history-item:active {
       opacity: 1;
       border-color: rgba(245, 245, 245, 0.35);
+      transform: scale(0.98);
     }
 
     /* ===== Error overlay ===== */
@@ -451,11 +503,12 @@
       font: inherit;
       font-size: 0.9375rem;
       cursor: pointer;
-      transition: border-color 0.2s ease;
+      transition: border-color 0.2s ease, transform 0.15s ease;
     }
 
     .retry-button:active {
       border-color: rgba(245, 245, 245, 0.6);
+      transform: scale(0.96);
     }
 
     .retry-button.hidden {
@@ -556,11 +609,7 @@
 
     async function requestWakeLock() {
       wakeLockDesired = true;
-
-      if (!('wakeLock' in navigator)) {
-        return;
-      }
-
+      if (!('wakeLock' in navigator)) return;
       try {
         wakeLockSentinel = await navigator.wakeLock.request('screen');
         wakeLockSentinel.addEventListener('release', () => {
