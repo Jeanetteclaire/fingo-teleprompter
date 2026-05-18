@@ -180,12 +180,11 @@
       -webkit-appearance: none;
       appearance: none;
       background: transparent;
-      height: 36px; /* tall touch target */
+      height: 36px;
       cursor: pointer;
       outline: none;
     }
 
-    /* Track */
     .speed-slider::-webkit-slider-runnable-track {
       width: 100%;
       height: 2px;
@@ -200,7 +199,6 @@
       border-radius: 999px;
     }
 
-    /* Thumb */
     .speed-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -208,7 +206,7 @@
       height: 22px;
       border-radius: 50%;
       background: #f5f5f5;
-      margin-top: -10px; /* center on the 2px track */
+      margin-top: -10px;
       cursor: pointer;
       transition: transform 0.15s ease;
     }
@@ -543,6 +541,49 @@
 
     let cameraReady = false;
 
+    // ===== Wake lock =====
+
+    let wakeLockSentinel = null;
+    let wakeLockDesired = false;
+
+    async function requestWakeLock() {
+      wakeLockDesired = true;
+
+      if (!('wakeLock' in navigator)) {
+        // Older browsers — quiet fallback, nothing to do
+        return;
+      }
+
+      try {
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        wakeLockSentinel.addEventListener('release', () => {
+          wakeLockSentinel = null;
+        });
+      } catch (err) {
+        console.error('Wake lock request failed:', err);
+        wakeLockSentinel = null;
+      }
+    }
+
+    async function releaseWakeLock() {
+      wakeLockDesired = false;
+      if (wakeLockSentinel) {
+        try {
+          await wakeLockSentinel.release();
+        } catch (err) {
+          console.error('Wake lock release failed:', err);
+        }
+        wakeLockSentinel = null;
+      }
+    }
+
+    // Re-acquire wake lock when returning to the tab (browser releases on hide)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && wakeLockDesired && !wakeLockSentinel) {
+        requestWakeLock();
+      }
+    });
+
     // ===== Scroll engine =====
 
     let scrollPosition = 0;
@@ -732,6 +773,7 @@
       tapZone.classList.remove('active');
       speedControl.classList.remove('active');
       resetScroll();
+      releaseWakeLock();
     }
 
     function showPrompterView() {
@@ -740,6 +782,7 @@
         editButton.classList.add('active');
         tapZone.classList.add('active');
         speedControl.classList.add('active');
+        requestWakeLock();
       }
     }
 
